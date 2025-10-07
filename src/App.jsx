@@ -229,9 +229,24 @@ function App() {
     return { score, level, color, feedback }
   }
 
+  // Load password history from localStorage on component mount
   useEffect(() => {
-    // Don't auto-generate on load
+    const savedHistory = localStorage.getItem('passwordHistory')
+    if (savedHistory) {
+      try {
+        setPasswordHistory(JSON.parse(savedHistory))
+      } catch (e) {
+        console.error('Failed to parse password history from localStorage', e)
+      }
+    }
   }, [])
+
+  // Save password history to localStorage whenever it changes
+  useEffect(() => {
+    if (passwordHistory.length > 0) {
+      localStorage.setItem('passwordHistory', JSON.stringify(passwordHistory))
+    }
+  }, [passwordHistory])
 
   const copyToClipboard = useCallback(async (password, index) => {
     try {
@@ -371,6 +386,15 @@ Remember to store this securely!`
         lastUsed: status === 'used' ? new Date().toLocaleString() : p.lastUsed 
       } : p
     ))
+    
+    // Also update in history
+    setPasswordHistory(prev => prev.map(p => 
+      p.id === id ? { 
+        ...p, 
+        status, 
+        lastUsed: status === 'used' ? new Date().toLocaleString() : p.lastUsed 
+      } : p
+    ))
   }, [])
 
   const deleteFromHistory = useCallback((id) => {
@@ -404,9 +428,14 @@ Remember to store this securely!`
         (p.note && p.note.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (p.purpose && p.purpose.toLowerCase().includes(searchTerm.toLowerCase()))
       
+      // Apply status filter if not 'all'
+      if (selectedStatus !== 'all') {
+        return matchesSearch && p.status === selectedStatus
+      }
+      
       return matchesSearch
     })
-  }, [passwordHistory, searchTerm])
+  }, [passwordHistory, searchTerm, selectedStatus])
 
   useEffect(() => {
     const handleKeyPress = (e) => {
@@ -888,9 +917,9 @@ Remember to store this securely!`
               </div>
               
               <div className="overflow-y-auto max-h-96">
-                {passwordHistory.length > 0 ? (
+                {getFilteredHistory().length > 0 ? (
                   <div className="space-y-2">
-                    {passwordHistory.map((passwordObj, index) => (
+                    {getFilteredHistory().map((passwordObj, index) => (
                       <div key={passwordObj.id} className="flex items-center justify-between bg-white/5 p-3 rounded hover:bg-white/10 transition-all">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
@@ -1034,6 +1063,13 @@ Remember to store this securely!`
                         <span className={`font-medium ${passwordObj.strength?.color || 'text-gray-400'}`}>
                           {passwordObj.strength?.level || 'Unknown'} ({passwordObj.strength?.score || 0}%)
                         </span>
+                        <span className={`px-2 py-1 rounded text-xs ${
+                          passwordObj.status === 'used' ? 'bg-green-500/20 text-green-400' :
+                          passwordObj.status === 'filled' ? 'bg-blue-500/20 text-blue-400' :
+                          'bg-gray-500/20 text-gray-400'
+                        }`}>
+                          {passwordObj.status?.replace('_', ' ') || 'not filled'}
+                        </span>
                       </div>
                       {passwordObj.purpose && (
                         <div className="text-white text-sm font-medium">
@@ -1056,6 +1092,15 @@ Remember to store this securely!`
                         title="Copy password"
                       >
                         📋
+                      </button>
+                      <button
+                        onClick={() => {
+                          updatePasswordStatus(passwordObj.id, 'used')
+                        }}
+                        className="text-green-400 hover:text-green-300 px-2 py-1 rounded transition-all"
+                        title="Mark as used"
+                      >
+                        ✅
                       </button>
                       <button
                         onClick={() => deleteFromHistory(passwordObj.id)}
